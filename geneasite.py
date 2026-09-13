@@ -150,8 +150,8 @@ if ($ip_brute !== $ip_filtrage) {{
 
     $historique[] = $nouvelle_visite;
 
-    if (count($historique) > 50000) {{
-        $historique = array_slice($historique, -50000);
+    if (count($historique) > 10000) {{
+        $historique = array_slice($historique, -10000);
     }}
 
     @file_put_contents($fichier_stats, json_encode($historique), LOCK_EX);
