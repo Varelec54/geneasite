@@ -9,7 +9,6 @@ class EditeurFicheIndividuNeophyte:
         self.root = root
         self.root.title("GeneWebGen - Éditeur de Fiches (Visuel)")
         
-        # Résolution optimisée pour éviter de masquer le bouton Enregistrer
         self.root.geometry("800x750")
         self.root.configure(padx=10, pady=10, bg="#f5f6fa")
 
@@ -44,7 +43,6 @@ class EditeurFicheIndividuNeophyte:
         self.frame_edition = tk.LabelFrame(root, text=" ✍️ 2. Rédiger l'histoire et ajouter des photos ", font=font_titre, padx=10, pady=8, bg="white", bd=1, relief="solid")
         self.frame_edition.pack(fill="both", expand=True, pady=(0, 10))
 
-        # Barre d'outils visuels
         frame_outils = tk.Frame(self.frame_edition, bg="#eaeaea", padx=5, pady=5)
         frame_outils.pack(fill="x", pady=(0, 5))
         
@@ -60,7 +58,6 @@ class EditeurFicheIndividuNeophyte:
         self.btn_image = tk.Button(frame_outils, text="🖼️ Ajouter une Photo", font=font_bouton, bg="#d35400", fg="white", bd=0, padx=10, command=self.inserer_image, state="disabled", cursor="hand2")
         self.btn_image.pack(side="right", padx=2)
 
-        # Zone d'édition principale
         self.txt_notes = scrolledtext.ScrolledText(self.frame_edition, wrap=tk.WORD, font=("Arial", 11), bd=1, relief="solid")
         self.txt_notes.pack(fill="both", expand=True)
         self.txt_notes.config(state="disabled")
@@ -80,7 +77,6 @@ class EditeurFicheIndividuNeophyte:
             return
 
         fichiers = os.listdir(self.dossier_individus)
-        # Modification ici : on cible les fichiers finissant par .php
         fichiers_trouves = [f for f in fichiers if recherche in f.lower() and f.endswith(".php")]
 
         if not fichiers_trouves:
@@ -99,7 +95,6 @@ class EditeurFicheIndividuNeophyte:
             listbox = tk.Listbox(popup, font=("Arial", 10))
             listbox.pack(fill="both", expand=True, padx=10, pady=5)
             for f in fichiers_trouves:
-                # Modification ici : remplacement de .php pour un affichage propre
                 listbox.insert(tk.END, f.replace(".php", "").replace("-", " "))
                 
             def on_select(event):
@@ -115,7 +110,6 @@ class EditeurFicheIndividuNeophyte:
         self.charger_fichier_php(fichiers_trouves[0])
 
     def desactiver_interface(self):
-        """Réinitialise et bloque l'accès à la zone d'édition"""
         self.txt_notes.delete("1.0", tk.END)
         self.txt_notes.config(state="disabled")
         self.btn_gras.config(state="disabled")
@@ -131,23 +125,22 @@ class EditeurFicheIndividuNeophyte:
         with open(chemin_test, "r", encoding="utf-8") as f:
             contenu_test = f.read()
 
-        # Sécurité : Bloquer si la fiche contient les marqueurs de protection de contemporains
         if "🔒 Fiche restreinte" in contenu_test or "(Masqué)" in contenu_test:
             self.desactiver_interface()
-            self.lbl_statut_fichier.config(text="🔒 Accès refusé : Cette fiche concerne un contemporain protégé.", fg="#e74c3c")
-            messagebox.showerror("Accès Restreint", "Sécurité : L'édition d'anecdotes et d'histoires est bloquée pour les personnes contemporaines masquées afin de respecter leur confidentialité.")
+            self.lbl_statut_fichier.config(text="🔒 Accès refusé : Contemporain protégé.", fg="#e74c3c")
+            messagebox.showerror("Accès Restreint", "L'édition est bloquée pour les personnes contemporaines masquées.")
             return
 
         self.fichier_actuel = chemin_test
         self.contenu_html_complet = contenu_test
 
-        pattern = r'(<section class="section-fiche notes-personnelles">.*?<h2>✍️ Notes & Notes Historiques</h2>\s*)(.*?)(</section>)'
-        match = re.search(pattern, self.contenu_html_complet, re.DOTALL)
+        # 1. Essai de détection de la section existante
+        pattern = r'<section class="[^"]*section-fiche[^"]*">(?:(?!</section>).)*?<h2[^>]*>.*?</h2>(.*?)</section>'
+        match = re.search(pattern, self.contenu_html_complet, re.DOTALL | re.IGNORECASE)
 
+        contenu_notes = ""
         if match:
-            contenu_notes = match.group(2).strip()
-            
-            # Ajustement du message indicatif
+            contenu_notes = match.group(1).strip()
             if "[Vous pouvez éditer ce fichier" in contenu_notes:
                 contenu_notes = ""
             else:
@@ -155,20 +148,18 @@ class EditeurFicheIndividuNeophyte:
                 contenu_notes = re.sub(r'<br\s*/?>', '\n', contenu_notes)
                 contenu_notes = re.sub(r'<p>|</p>', '', contenu_notes)
 
-            self.txt_notes.config(state="normal")
-            self.btn_gras.config(state="normal")
-            self.btn_centre.config(state="normal")
-            self.btn_liste.config(state="normal")
-            self.btn_image.config(state="normal")
-            self.btn_sauver.config(state="normal")
-            
-            self.txt_notes.delete("1.0", tk.END)
-            self.txt_notes.insert(tk.END, contenu_notes.strip())
-            
-            # Modification ici : remplacement de .php pour le statut vert
-            self.lbl_statut_fichier.config(text=f"🟢 Fiche active : {nom_fichier.replace('.php', '').upper()}", fg="#27ae60")
-        else:
-            messagebox.showerror("Erreur", "Structure de la fiche incompatible.")
+        # Activer l'interface dans tous les cas
+        self.txt_notes.config(state="normal")
+        self.btn_gras.config(state="normal")
+        self.btn_centre.config(state="normal")
+        self.btn_liste.config(state="normal")
+        self.btn_image.config(state="normal")
+        self.btn_sauver.config(state="normal")
+        
+        self.txt_notes.delete("1.0", tk.END)
+        self.txt_notes.insert(tk.END, contenu_notes.strip())
+        
+        self.lbl_statut_fichier.config(text=f"🟢 Fiche active : {nom_fichier.replace('.php', '').upper()}", fg="#27ae60")
 
     def inserer_formatage(self, type_format):
         try:
@@ -225,23 +216,28 @@ class EditeurFicheIndividuNeophyte:
                     blocs_finaux.append(f"<p>{bloc_strip.replace('\n', '<br>')}</p>")
             texte_a_sauver = "\n            ".join(blocs_finaux)
 
-        pattern = r'(<section class="section-fiche notes-personnelles">.*?<h2>✍️ Notes & Notes Historiques</h2>\s*)(.*?)(</section>)'
+        # Structure propre du bloc HTML à réinsérer
+        bloc_html_complet = f'<section class="section-fiche notes-personnelles">\n            <h2>✍️ Notes & Notes Historiques</h2>\n            {texte_a_sauver}\n        </section>'
+
+        # Remplace une section existante OU s'insère juste avant le pied de page / </main>
+        pattern = r'<section class="[^"]*section-fiche[^"]*">(?:(?!</section>).)*?<h2[^>]*>.*?</h2>.*?</section>'
         
-        def remplacement(match):
-            return f"{match.group(1)}\n            {texte_a_sauver}\n        {match.group(3)}"
-
-        nouveau_html_total, count = re.subn(pattern, remplacement, self.contenu_html_complet, flags=re.DOTALL)
-
-        if count > 0:
-            try:
-                with open(self.fichier_actuel, "w", encoding="utf-8") as f:
-                    f.write(nouveau_html_total)
-                self.contenu_html_complet = nouveau_html_total
-                messagebox.showinfo("Succès !", "💾 Enregistrement réussi !")
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Erreur écriture :\n{e}")
+        if re.search(pattern, self.contenu_html_complet, re.DOTALL | re.IGNORECASE):
+            nouveau_html_total = re.sub(pattern, bloc_html_complet, self.contenu_html_complet, count=1, flags=re.DOTALL | re.IGNORECASE)
         else:
-            messagebox.showerror("Erreur", "Échec de l'application des modifications.")
+            # Insertion dynamique avant </main> ou </body> si la section n'existait pas
+            if "</main>" in self.contenu_html_complet:
+                nouveau_html_total = self.contenu_html_complet.replace("</main>", f"    {bloc_html_complet}\n</main>")
+            else:
+                nouveau_html_total = self.contenu_html_complet.replace("</body>", f"    {bloc_html_complet}\n</body>")
+
+        try:
+            with open(self.fichier_actuel, "w", encoding="utf-8") as f:
+                f.write(nouveau_html_total)
+            self.contenu_html_complet = nouveau_html_total
+            messagebox.showinfo("Succès !", "💾 Enregistrement réussi !")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur écriture :\n{e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
