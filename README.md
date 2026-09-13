@@ -59,7 +59,18 @@ python3 generate_site.py
     (Optionnel) Saisissez votre adresse IP pour ne pas la comptabiliser dans les statistiques.
 
     Personnalisez l'apparence (couleurs, police, texte d'introduction) puis cliquez sur 🚀 Générer le site Internet (PHP).
+    
+### 4 Modifier une fiche individuelle
 
+Tout comme le script principal, l'éditeur de fiches est un programme écrit en Python qui se lance localement sur votre ordinateur. 
+Une fois lancé, l'outil vous propose une interface claire divisée en trois étapes :
+
+    Sélectionner le dossier du site : Cliquez sur Parcourir... et sélectionnez le dossier site_web généré préalablement.
+    
+    Choisir un individu : Utilisez la liste déroulante ou la barre de recherche intégrée pour sélectionner l'ancêtre dont vous souhaitez modifier la fiche.
+    
+    Rédiger l'histoire : Écrivez ou collez vos textes dans la grande zone de saisie. Vous pouvez y intégrer du texte brut ou utiliser des balises HTML pour mettre en forme vos écrits.
+  
 ### 4. Mise en ligne
 
 Le script crée un dossier nommé site_web.
@@ -71,7 +82,7 @@ Pour publier votre site :
 
 ## 📄 Licence & Crédits
 
-Auteur : JanusEye
+Auteur : Varelec
 
 Pied de page : Un discret lien de crédit est inclus en bas de page pour permettre à d'autres passionnés de découvrir l'outil.
 
