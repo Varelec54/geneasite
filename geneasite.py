@@ -10,6 +10,12 @@ from gedcom.parser import Parser
 from gedcom.element.individual import IndividualElement
 from gedcom.element.family import FamilyElement
 
+try:
+    import bcrypt
+    HAS_BCRYPT = True
+except ImportError:
+    HAS_BCRYPT = False
+
 def nettoyer_html(texte):
     if not texte: return ""
     return re.sub(r'<[^>]+>', '', texte)
@@ -164,13 +170,28 @@ def generer_page_stats(output_dir, config):
     mot_de_passe = config.get("pass_stats", "123456")
     titre_clean = nettoyer_html(config.get('titre_principal', 'Généalogie'))
 
+    if HAS_BCRYPT:
+        salt = bcrypt.gensalt(rounds=10, prefix=b"2b")
+        hash_bytes = bcrypt.hashpw(mot_de_passe.encode('utf-8'), salt)
+        hash_str = hash_bytes.decode('utf-8')
+        
+        hash_php = hash_str.replace('$2b$', '$2y$')
+        definition_hash = f'$hash_mot_de_passe = "{hash_php}";'
+    else:
+
+        raise ImportError(
+            "Le module Python 'bcrypt' n'est pas installé sur votre système.\n"
+            "Pour sécuriser vos mots de passe, veuillez l'installer via la commande :\n"
+            "pip install bcrypt"
+        )
+
     html_stats = f"""<?php
 session_start();
-$mot_de_passe_correct = "{mot_de_passe}";
+{definition_hash}
 $erreur = "";
 
 if (isset($_POST['password'])) {{
-    if ($_POST['password'] === $mot_de_passe_correct) {{
+    if (password_verify($_POST['password'], $hash_mot_de_passe)) {{
         $_SESSION['auth_stats'] = true;
     }} else {{
         $erreur = "Mot de passe incorrect.";
@@ -301,7 +322,7 @@ $fichier_json = __DIR__ . '/stats.json';
                                 <td><strong><?php echo htmlspecialchars(isset($v['date']) ? $v['date'] : ''); ?></strong></td>
                                 <td><code class="badge-page"><?php echo $page; ?></code></td>
                                 <td>
-                                        <a href="https://ipapi.co/<?php echo urlencode($visite['ip']); ?>/" target="_blank" rel="noopener noreferrer" style="color: var(--accent-color); text-decoration: underline; font-weight: bold;">
+                                        <a href="https://ipapi.co/<?php echo urlencode($ip); ?>/" target="_blank" rel="noopener noreferrer" style="color: var(--accent-color); text-decoration: underline; font-weight: bold;">
                                             <span class="badge-ip"><?php echo $ip; ?> 🔗</span>
                                         </a>
                                 </td>
@@ -337,10 +358,10 @@ $fichier_json = __DIR__ . '/stats.json';
             </div>
         <?php endif; ?>
         {obtenir_pied_de_page_html(config, niveau_relatif="")}
-        <p style="margin-top: 20px; text-align: center;"><a href="../index.php">← Retour à l'accueil principal</a></p>
     </main>
 </body>
 </html>"""
+
     with open(os.path.join(output_dir, "stats.php"), "w", encoding="utf-8") as f:
         f.write(html_stats)
 
@@ -358,11 +379,11 @@ def obtenir_pied_de_page_html(config, niveau_relatif=""):
         <p>Données rassemblées par {config.get('auteur', '')}</p>
         {html_contact}
         <p style="margin-top: 15px; font-size: 0.85em;">
-            <a href="http://geneasite.free.fr" target="_blank">Généré via l'application GénéaSite, du GEDCOM au site web</a><br> |
+            <a href="https://geneasite.pages-perso.free.fr/" target="_blank">Généré via l'application GénéaSite, du GEDCOM au site web</a><br> |
             <a href="{niveau_relatif}stats.php">Statistiques</a> | 
             <a href="{niveau_relatif}mentions.php" style="text-decoration: underline;">Mentions légales & Confidentialité</a>
         </p>
-        <p style="margin-top: 20px; text-align: center;"><a href="../index.php">← Retour à l'accueil principal</a></p>
+        <p style="margin-top: 20px; text-align: center;"><a href="{niveau_relatif}index.php">← Retour à l'accueil principal</a></p>
     </footer>"""
 
 def generer_barre_recherche_html():
@@ -594,12 +615,10 @@ def execution_generation(config):
     generer_page_stats(output_dir, config)
     
     police_choisie = config.get('police', 'Segoe UI')
-    font_declaration = f"@import url('https://fonts.googleapis.com/css2?family={police_choisie.replace(' ', '+')}:wght@300;400;500;700&display=swap');\n"
-    police_alternative = f"'{police_choisie}', sans-serif"
+    police_alternative = f"'{police_choisie}', system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif"
 
     with open(os.path.join(output_dir, "assets", "style.css"), "w", encoding="utf-8") as f:
-        f.write(f"""{font_declaration}
-:root {{
+        f.write(f""":root {{
     --bg-principal: {config.get('c_fond_principal', '#0b0f19')};
     --bg-cadre-principal: {config.get('c_fond_cadre_principal', '#0d111a')};
     --bg-cadre-secondaire: {config.get('c_fond_cadre_secondaire', '#111625')};
@@ -692,7 +711,6 @@ function gererEntreeRecherche(e) {
                 nom_seul = "".join(elem.get_name()[1]).strip()
                 premiere_lettre = nom_seul[0].upper() if nom_seul else (nom_complet[0].upper() if nom_complet else '#')
                 
-                # Gestion des caractères accentués pour l'index
                 premiere_lettre = "".join(c for c in unicodedata.normalize("NFD", premiere_lettre) if unicodedata.category(c) != 'Mn')
                 
                 if not premiere_lettre.isalpha():
@@ -830,14 +848,15 @@ class AppGUI:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill="both", expand=True)
 
-        f_guide = ttk.LabelFrame(main_frame, text="💡 GUIDE DE MISE EN FORME (Pour le Titre et l'Introduction) :")
+        f_guide = ttk.LabelFrame(main_frame, text="💡 GUIDE DE MISE EN FORME & PRÉREQUIS :")
         f_guide.pack(fill="x", pady=5)
         guide_txt = (
-            "Vous pouvez embellir vos textes en ajoutant directement des balises HTML :\n"
             "• <b>Mon texte</b> : pour mettre en gras.\n"
             "• <i>Mon texte</i> : pour mettre en italique.\n"
             "• <center>Mon texte</center> : pour centrer les mots ou lignes.\n"
-            "• <span style='font-family: Arial;'>Mon texte</span> : pour personnaliser la typographie."
+            "• <span style='font-family: Arial;'>Mon texte</span> : pour personnaliser la typographie.\n"
+            "• Modules Python requis : pip install python-gedcom bcrypt\n"
+            "• Astuce Linux si pip bloque : pip3 install python-gedcom bcrypt --break-system-packages"
         )
         ttk.Label(f_guide, text=guide_txt, justify="left").pack(anchor="w", padx=5, pady=5)
 
