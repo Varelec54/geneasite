@@ -171,14 +171,20 @@ def generer_page_stats(output_dir, config):
     titre_clean = nettoyer_html(config.get('titre_principal', 'Généalogie'))
 
     if HAS_BCRYPT:
-        salt = bcrypt.gensalt(rounds=10, prefix=b"2b")
-        hash_bytes = bcrypt.hashpw(mot_de_passe.encode('utf-8'), salt)
+        pwd_bytes = mot_de_passe.encode('utf-8')
+        salt = bcrypt.gensalt(rounds=10)
+        hash_bytes = bcrypt.hashpw(pwd_bytes, salt)
         hash_str = hash_bytes.decode('utf-8')
-        
-        hash_php = hash_str.replace('$2b$', '$2y$')
-        definition_hash = f'$hash_mot_de_passe = "{hash_php}";'
-    else:
 
+        if hash_str.startswith('$2b$'):
+            hash_php = '$2y$' + hash_str[4:]
+        elif hash_str.startswith('$2a$'):
+            hash_php = '$2y$' + hash_str[4:]
+        else:
+            hash_php = hash_str
+
+        definition_hash = f"$hash_mot_de_passe = '{hash_php}';"
+    else:
         raise ImportError(
             "Le module Python 'bcrypt' n'est pas installé sur votre système.\n"
             "Pour sécuriser vos mots de passe, veuillez l'installer via la commande :\n"
@@ -710,7 +716,7 @@ function gererEntreeRecherche(e) {
                 
                 nom_seul = "".join(elem.get_name()[1]).strip()
                 premiere_lettre = nom_seul[0].upper() if nom_seul else (nom_complet[0].upper() if nom_complet else '#')
-                
+
                 premiere_lettre = "".join(c for c in unicodedata.normalize("NFD", premiere_lettre) if unicodedata.category(c) != 'Mn')
                 
                 if not premiere_lettre.isalpha():
