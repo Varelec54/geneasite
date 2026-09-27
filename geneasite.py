@@ -145,34 +145,31 @@ if ($ip_brute !== $ip_filtrage) {{
         "os" => $os
     );
 
-    $fp = @fopen($fichier_stats, 'c+');
-    if ($fp) {{
-        if (flock($fp, LOCK_EX)) {{
-            $taille = filesize($fichier_stats);
-            $historique = array();
+    $historique = array();
 
-            if ($taille > 0) {{
-                $contenu = fread($fp, $taille);
-                $json = json_decode($contenu, true);
-                if (is_array($json)) {{
-                    $historique = $json;
-                }}
-            }}
-
-            $historique[] = $nouvelle_visite;
-
-            if (count($historique) > 10000) {{
-                $historique = array_slice($historique, -10000);
-            }}
-
-            ftruncate($fp, 0);
-            rewind($fp);
-            fwrite($fp, json_encode($historique));
-            fflush($fp);
-            flock($fp, LOCK_UN);
-        }}
-        fclose($fp);
+    // 1. Si le fichier n'existe pas ou est complètement vide, on l'initialise
+    if (!file_exists($fichier_stats) || filesize($fichier_stats) === 0) {{
+        @file_put_contents($fichier_stats, json_encode(array()));
     }}
+
+    // 2. Lecture du fichier
+    $contenu = @file_get_contents($fichier_stats);
+    if ($contenu !== false && strlen(trim($contenu)) > 0) {{
+        $json = json_decode($contenu, true);
+        if (is_array($json)) {{
+            $historique = $json;
+        }}
+    }}
+
+    // 3. Ajout de la nouvelle visite
+    $historique[] = $nouvelle_visite;
+
+    if (count($historique) > 10000) {{
+        $historique = array_slice($historique, -10000);
+    }}
+
+    // 4. Écriture directe avec verrouillage natif
+    @file_put_contents($fichier_stats, json_encode($historique), LOCK_EX);
 }}
 ?>"""
     with open(os.path.join(output_dir, "stats_inc.php"), "w", encoding="utf-8") as f:
