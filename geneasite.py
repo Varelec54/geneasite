@@ -10,6 +10,7 @@ from gedcom.parser import Parser
 from gedcom.element.individual import IndividualElement
 from gedcom.element.family import FamilyElement
 
+# Essai d'import de bcrypt pour sécuriser le mot de passe côté Python
 try:
     import bcrypt
     HAS_BCRYPT = True
@@ -144,23 +145,34 @@ if ($ip_brute !== $ip_filtrage) {{
         "os" => $os
     );
 
-    $historique = array();
+    $fp = @fopen($fichier_stats, 'c+');
+    if ($fp) {{
+        if (flock($fp, LOCK_EX)) {{
+            $taille = filesize($fichier_stats);
+            $historique = array();
 
-    if (file_exists($fichier_stats)) {{
-        $contenu = @file_get_contents($fichier_stats);
-        if ($contenu) {{
-            $json = json_decode($contenu, true);
-            if (is_array($json)) {{ $historique = $json; }}
+            if ($taille > 0) {{
+                $contenu = fread($fp, $taille);
+                $json = json_decode($contenu, true);
+                if (is_array($json)) {{
+                    $historique = $json;
+                }}
+            }}
+
+            $historique[] = $nouvelle_visite;
+
+            if (count($historique) > 10000) {{
+                $historique = array_slice($historique, -10000);
+            }}
+
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, json_encode($historique));
+            fflush($fp);
+            flock($fp, LOCK_UN);
         }}
+        fclose($fp);
     }}
-
-    $historique[] = $nouvelle_visite;
-
-    if (count($historique) > 10000) {{
-        $historique = array_slice($historique, -10000);
-    }}
-
-    @file_put_contents($fichier_stats, json_encode($historique), LOCK_EX);
 }}
 ?>"""
     with open(os.path.join(output_dir, "stats_inc.php"), "w", encoding="utf-8") as f:
@@ -170,12 +182,14 @@ def generer_page_stats(output_dir, config):
     mot_de_passe = config.get("pass_stats", "123456")
     titre_clean = nettoyer_html(config.get('titre_principal', 'Généalogie'))
 
+    # Vérification de la présence de la bibliothèque bcrypt
     if HAS_BCRYPT:
         pwd_bytes = mot_de_passe.encode('utf-8')
         salt = bcrypt.gensalt(rounds=10)
         hash_bytes = bcrypt.hashpw(pwd_bytes, salt)
         hash_str = hash_bytes.decode('utf-8')
 
+        # Conversion forcée du préfixe vers $2y$ (format natif PHP)
         if hash_str.startswith('$2b$'):
             hash_php = '$2y$' + hash_str[4:]
         elif hash_str.startswith('$2a$'):
@@ -183,8 +197,10 @@ def generer_page_stats(output_dir, config):
         else:
             hash_php = hash_str
 
+        # Utilisation de guillemets simples autour de la valeur pour éviter l'interprétation des $ par PHP
         definition_hash = f"$hash_mot_de_passe = '{hash_php}';"
     else:
+        # Si bcrypt manque, on stoppe net la génération
         raise ImportError(
             "Le module Python 'bcrypt' n'est pas installé sur votre système.\n"
             "Pour sécuriser vos mots de passe, veuillez l'installer via la commande :\n"
@@ -716,7 +732,8 @@ function gererEntreeRecherche(e) {
                 
                 nom_seul = "".join(elem.get_name()[1]).strip()
                 premiere_lettre = nom_seul[0].upper() if nom_seul else (nom_complet[0].upper() if nom_complet else '#')
-
+                
+                # Gestion des caractères accentués pour l'index
                 premiere_lettre = "".join(c for c in unicodedata.normalize("NFD", premiere_lettre) if unicodedata.category(c) != 'Mn')
                 
                 if not premiere_lettre.isalpha():
