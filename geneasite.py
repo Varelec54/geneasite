@@ -19,7 +19,7 @@ except ImportError:
 
 def nettoyer_html(texte):
     if not texte: return ""
-    return re.sub(r'<[^>]+>', '', texte)
+    return re.sub(r'<[^>]+>', '', texte).strip()
 
 def charger_gedcom(chemin_gedcom):
     gedcom_parser = Parser()
@@ -147,12 +147,10 @@ if ($ip_brute !== $ip_filtrage) {{
 
     $historique = array();
 
-    // 1. Si le fichier n'existe pas ou est complètement vide, on l'initialise
     if (!file_exists($fichier_stats) || filesize($fichier_stats) === 0) {{
         @file_put_contents($fichier_stats, json_encode(array()));
     }}
 
-    // 2. Lecture du fichier
     $contenu = @file_get_contents($fichier_stats);
     if ($contenu !== false && strlen(trim($contenu)) > 0) {{
         $json = json_decode($contenu, true);
@@ -161,14 +159,12 @@ if ($ip_brute !== $ip_filtrage) {{
         }}
     }}
 
-    // 3. Ajout de la nouvelle visite
     $historique[] = $nouvelle_visite;
 
     if (count($historique) > 10000) {{
         $historique = array_slice($historique, -10000);
     }}
 
-    // 4. Écriture directe avec verrouillage natif
     @file_put_contents($fichier_stats, json_encode($historique), LOCK_EX);
 }}
 ?>"""
@@ -179,14 +175,12 @@ def generer_page_stats(output_dir, config):
     mot_de_passe = config.get("pass_stats", "123456")
     titre_clean = nettoyer_html(config.get('titre_principal', 'Généalogie'))
 
-    # Vérification de la présence de la bibliothèque bcrypt
     if HAS_BCRYPT:
         pwd_bytes = mot_de_passe.encode('utf-8')
         salt = bcrypt.gensalt(rounds=10)
         hash_bytes = bcrypt.hashpw(pwd_bytes, salt)
         hash_str = hash_bytes.decode('utf-8')
 
-        # Conversion forcée du préfixe vers $2y$ (format natif PHP)
         if hash_str.startswith('$2b$'):
             hash_php = '$2y$' + hash_str[4:]
         elif hash_str.startswith('$2a$'):
@@ -194,10 +188,8 @@ def generer_page_stats(output_dir, config):
         else:
             hash_php = hash_str
 
-        # Utilisation de guillemets simples autour de la valeur pour éviter l'interprétation des $ par PHP
         definition_hash = f"$hash_mot_de_passe = '{hash_php}';"
     else:
-        # Si bcrypt manque, on stoppe net la génération
         raise ImportError(
             "Le module Python 'bcrypt' n'est pas installé sur votre système.\n"
             "Pour sécuriser vos mots de passe, veuillez l'installer via la commande :\n"
@@ -248,6 +240,7 @@ $fichier_json = __DIR__ . '/stats.json';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Espace de consultation des statistiques de fréquentation du site généalogique {titre_clean}.">
     <title>Statistiques - {titre_clean}</title>
     <link rel="stylesheet" href="assets/style.css?v=5">
     <style>
@@ -433,7 +426,17 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
                 if sub.get_tag() == 'DATE': death_date = sub.get_value().strip()
                 if sub.get_tag() == 'PLAC': death_place = sub.get_value().strip()
 
-    ligne_deces_html = f"<p><strong>⚰️ Décès :</strong> Le {death_date} — 📍 {death_place}</p>" if (death_date != "Inconnu" and death_date != "") else "<p><strong>⚰️ Décès :</strong> Supposé(e) décédé(e)</p>"
+    ligne_deces_html = f"<p><strong>⚰️ Décès :</strong> Le {death_date} — 📍 {death_place}</p>" if (death_date != "Inconnu" and death_date != "") else "<p><strong>⚰️️ Décès :</strong> Supposé(e) décédé(e)</p>"
+
+    # Construction dynamique de la méta description
+    details_dates = []
+    if birth_date != "Inconnue": details_dates.append(f"né(e) le {birth_date}")
+    if birth_place != "Inconnu": details_dates.append(f"à {birth_place}")
+    if death_date != "Inconnu" and death_date != "": details_dates.append(f"décédé(e) le {death_date}")
+    
+    str_details = " " + " ".join(details_dates) if details_dates else ""
+    meta_desc = f"Fiche généalogique de {prenom} {nom}{str_details}. Découvrez sa ligne généalogique, ses parents, conjoints et descendants."
+    meta_desc_clean = meta_desc.replace('"', '&quot;')
 
     parents_html = ""
     id_familles_parents = [c.get_value() for c in individu.get_child_elements() if c.get_tag() == 'FAMC']
@@ -501,6 +504,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{meta_desc_clean}">
     <title>{prenom} {nom}</title>
     <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="../assets/style.css?v=5">
@@ -523,6 +527,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     <script src="../assets/search.js"></script>
 </body>
 </html>"""
+
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(html_content)
 
@@ -535,6 +540,7 @@ def generer_page_mentions(output_dir, config):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Mentions légales, hébergement et politique de confidentialité du site généalogique {titre_clean}.">
     <title>Mentions légales - {titre_clean}</title>
     <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=5">
@@ -563,10 +569,14 @@ def generer_page_mentions(output_dir, config):
         f.write(obtenir_php_tracking_header("") + "\n" + html_body)
 
 def generer_page_contact(output_dir, config):
+    titre_clean = nettoyer_html(config.get('titre_principal', ''))
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8"><title>Contact</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Formulaire de contact pour poser vos questions ou proposer des compléments généalogiques sur le site {titre_clean}.">
+    <title>Contact - {titre_clean}</title>
     <link rel="stylesheet" href="assets/style.css?v=5">
 </head>
 <body>
@@ -588,13 +598,15 @@ def generer_page_contact(output_dir, config):
 
 def generer_page_liste_lettre(lettre, liste_individus, output_dir, config):
     elements_liste = "".join(f'<li><a href="../{lien}">{nom}</a></li>' for nom, lien in sorted(liste_individus))
+    titre_clean = nettoyer_html(config.get('titre_principal', ''))
     
     html_content = obtenir_php_tracking_header("../") + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Individus commençant par {lettre}</title>
+    <meta name="description" content="Index alphabétique des personnes recensées dans l'arbre généalogique ({titre_clean}) dont le nom commence par la lettre {lettre}.">
+    <title>Individus commençant par {lettre} - {titre_clean}</title>
     <link rel="stylesheet" href="../assets/style.css?v=5">
 </head>
 <body>
@@ -602,6 +614,7 @@ def generer_page_liste_lettre(lettre, liste_individus, output_dir, config):
         <h1>Individus - Lettre {lettre}</h1>
         <div style="margin-bottom: 20px;">{generer_barre_recherche_html()}</div>
         <div class="section-fiche">
+            <h2>Liste des personnes</h2>
             <ul>
                 {elements_liste}
             </ul>
@@ -730,7 +743,6 @@ function gererEntreeRecherche(e) {
                 nom_seul = "".join(elem.get_name()[1]).strip()
                 premiere_lettre = nom_seul[0].upper() if nom_seul else (nom_complet[0].upper() if nom_complet else '#')
                 
-                # Gestion des caractères accentués pour l'index
                 premiere_lettre = "".join(c for c in unicodedata.normalize("NFD", premiere_lettre) if unicodedata.category(c) != 'Mn')
                 
                 if not premiere_lettre.isalpha():
@@ -754,12 +766,16 @@ function gererEntreeRecherche(e) {
         generer_page_contact(output_dir, config)
 
     texte_intro = config.get("texte_intro", "")
+    intro_nettoyee = nettoyer_html(texte_intro).replace('"', '&quot;')
+    if not intro_nettoyee:
+        intro_nettoyee = f"Consultez l'arbre généalogique de {config.get('auteur', '')} comprenant {total_individus} personnes."
 
     html_index = obtenir_php_tracking_header("") + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{intro_nettoyee}">
     <title>{nettoyer_html(config.get('titre_principal', 'Généalogie'))}</title>
     <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=5">
@@ -777,7 +793,8 @@ function gererEntreeRecherche(e) {
         </div>
 
         <div class="section-fiche" style="text-align: center; padding: 20px;">
-            <h2 style="margin-top: 0;">Accès alphabétique ({total_individus} individus)</h2>
+            <h2 style="margin-top: 0;">Accès alphabétique</h2>
+            <h3 style="margin-top: 0;">Nombre total ({total_individus} individus)</h3>
             <p style="margin-bottom: 15px;">Cliquez sur une lettre pour afficher les personnes correspondantes :</p>
             <div class="index-alpha-grid">
                 {html_alphabet}
